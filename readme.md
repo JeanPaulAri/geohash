@@ -50,3 +50,7 @@ El programa exportara dos archivos CSV con los siguientes contenidos:
 ![localizacion](https://github.com/JeanPaulAri/geohash/blob/master/img2.png)
 
 ![cuadrante del geohash](https://github.com/JeanPaulAri/geohash/blob/master/img3.png)
+
+![precision1 del geohash](https://github.com/JeanPaulAri/geohash/blob/master/img4.png)
+![precision2 del geohash](https://github.com/JeanPaulAri/geohash/blob/master/img5.png)
+![precision3 del geohash](https://github.com/JeanPaulAri/geohash/blob/master/img6.png)
