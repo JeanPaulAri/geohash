@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <stack>
 #include <iomanip>
+#include <unordered_map>
+#include "geohash.h"
 
 using namespace std;
 
@@ -13,6 +15,7 @@ using namespace std;
 struct Node {
     long long osmid;
     double lat, lon;
+    string geohash;
 };
 
 struct Edge {
@@ -24,7 +27,7 @@ struct Edge {
 
 vector<Node> nodes;
 vector<Edge> edges;
-
+unordered_map<string, vector<Node>> geohash_map;
 
 vector<string> splitData( string str, char delimiter) {
     vector<string> tokens;
@@ -71,6 +74,7 @@ bool readNodes(const string&filename, vector<Node> &nodes){
         cout<< fixed << setprecision(10);
         cout << "Node ["<<lineNumber<<"] : " << node.osmid << ", " << node.lat << ", " << node.lon  << endl;
         nodes.push_back(node);
+        geohash_map[node.geohash].push_back(node);
     }
 
     cout<<"Tarea completada!"<<endl;
@@ -147,11 +151,49 @@ void readDataset(const string &nodesFile, const string &edgesFile) {
     }
 }
 
+Edge findClosestEdge(double lat, double lon) {
+    string geohash = geohash_encode(lat, lon);
+    vector<string> neighbors = geohash_neighbors(geohash);
+    neighbors.push_back(geohash);
+
+    double min_distance = numeric_limits<double>::max();
+    Edge closest_edge;
+
+    for (const string& neighbor : neighbors) {
+        if (geohash_map.find(neighbor) != geohash_map.end()) {
+            for (const Node& node : geohash_map[neighbor]) {
+                for (const Edge& edge : edges) {
+                    if (edge.u == node.osmid || edge.v == node.osmid) {
+                        double distance = hypot(lat - node.lat, lon - node.lon);
+                        if (distance < min_distance) {
+                            min_distance = distance;
+                            closest_edge = edge;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return closest_edge;
+}
+
+void query(double lat, double lon) {
+    Edge closest_edge = findClosestEdge(lat, lon);
+    cout << "La arista más cercana al punto (" << lat << ", " << lon << ") es: " 
+         << closest_edge.u << " -> " << closest_edge.v << endl;
+}
+
+
 int main(){
     string nodesFile = "nodes.csv";
     string edgesFile = "edges.csv";
 
     readDataset(nodesFile, edgesFile);
+
+    double lat = -12.046374;
+    double lon = -77.042793;
+    query(lat, lon);
 
     return 0;
 }
