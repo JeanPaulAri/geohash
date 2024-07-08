@@ -48,3 +48,5 @@ El programa exportara dos archivos CSV con los siguientes contenidos:
 ![mapa de arequipa](https://github.com/JeanPaulAri/geohash/blob/master/img1.png)
 
 ![localizacion](https://github.com/JeanPaulAri/geohash/blob/master/img2.png)
+
+![cuadrante del geohash](https://github.com/JeanPaulAri/geohash/blob/master/img3.png)
