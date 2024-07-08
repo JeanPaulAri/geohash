@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <stack>
 #include <iomanip>
+#include <cmath>
+#include <limits>
 #include <unordered_map>
 #include "geohash.h"
 
@@ -28,6 +30,7 @@ struct Edge {
 vector<Node> nodes;
 vector<Edge> edges;
 unordered_map<string, vector<Node>> geohash_map;
+unordered_map<long long, Node> node_map;
 
 vector<string> splitData( string str, char delimiter) {
     vector<string> tokens;
@@ -62,19 +65,25 @@ bool readNodes(const string&filename, vector<Node> &nodes){
         Node node;
 
        
-            try {
+        try {
             getline(ss, item, ','); node.osmid = stoll(item);
             getline(ss, item, ','); node.lat = stod(item);
             getline(ss, item, ','); node.lon = stod(item);
+
+            if (node.lat < -90.0 || node.lat > 90.0 || node.lon < -180.0 || node.lon > 180.0) {
+                throw out_of_range("Coordenadas fuera de rango.");
+            }
+            node.geohash = geohash_encode(node.lat, node.lon);
         } catch (const exception &e) {
-            cerr << "[ERROR] -> Error procesando la línea " << lineNumber << ": " << e.what() << endl;
+            cerr << "[ERROR] -> Error procesando la linea " << lineNumber << ": " << e.what() << endl;
             continue;
         }
         
-        cout<< fixed << setprecision(10);
+        cout<< fixed << setprecision(7);
         cout << "Node ["<<lineNumber<<"] : " << node.osmid << ", " << node.lat << ", " << node.lon  << endl;
         nodes.push_back(node);
         geohash_map[node.geohash].push_back(node);
+        node_map[node.osmid] = node;
     }
 
     cout<<"Tarea completada!"<<endl;
@@ -114,7 +123,7 @@ bool readEdges(const string&filename, vector<Edge> &edges){
                 edge.names.push_back(item);
             }
         } catch (const exception &e) {
-            cerr << "[ERROR] -> Error procesando la línea: " <<lineNumber <<", "<< e.what() << endl;
+            cerr << "[ERROR] -> Error procesando la linea: " <<lineNumber <<", "<< e.what() << endl;
             continue;
         }
         cout << "Edge [" << lineNumber << "] :  (" << edge.u << " -> " << edge.v <<")" << endl;
@@ -152,12 +161,17 @@ void readDataset(const string &nodesFile, const string &edgesFile) {
 }
 
 Edge findClosestEdge(double lat, double lon) {
+
+    if (lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0) {
+        throw out_of_range("Coordenadas fuera de rango.");
+    }
     string geohash = geohash_encode(lat, lon);
     vector<string> neighbors = geohash_neighbors(geohash);
     neighbors.push_back(geohash);
 
     double min_distance = numeric_limits<double>::max();
     Edge closest_edge;
+    bool found = false;
 
     for (const string& neighbor : neighbors) {
         if (geohash_map.find(neighbor) != geohash_map.end()) {
@@ -168,22 +182,63 @@ Edge findClosestEdge(double lat, double lon) {
                         if (distance < min_distance) {
                             min_distance = distance;
                             closest_edge = edge;
+                            found = true;
                         }
                     }
                 }
             }
         }
     }
-
+    if (!found) {
+        throw runtime_error("No se encontro ninguna arista cercana al punto dado.");
+    }
     return closest_edge;
 }
+void exportCSV(const string& queryFile, const string& nodesGeohashFile, double queryLat, double queryLon, const Edge& resultEdge) {
 
-void query(double lat, double lon) {
-    Edge closest_edge = findClosestEdge(lat, lon);
-    cout << "La arista más cercana al punto (" << lat << ", " << lon << ") es: " 
-         << closest_edge.u << " -> " << closest_edge.v << endl;
+    ofstream queryOut(queryFile);
+    if (!queryOut.is_open()) {
+        cerr << "[ERROR] -> No se pudo abrir el archivo " << queryFile << " para escritura." << endl;
+        return;
+    }
+    queryOut << "query_lat,query_lon,result_u,result_v" << endl;
+    queryOut << fixed << setprecision(7);
+    queryOut << queryLat << "," << queryLon << "," << resultEdge.u << "," << resultEdge.v << endl;
+    queryOut.close();
+
+    ofstream nodesOut(nodesGeohashFile);
+    if (!nodesOut.is_open()) {
+        cerr << "[ERROR] -> No se pudo abrir el archivo " << nodesGeohashFile << " para escritura." << endl;
+        return;
+    }
+    nodesOut << "osmid,lat,lon,geohash" << endl;
+    for (const Node& node : nodes) {
+        nodesOut << fixed << setprecision(7);
+        nodesOut << node.osmid << "," << node.lat << "," << node.lon << "," << node.geohash << endl;
+    }
+    nodesOut.close();
+    
+    cout << "Archivos exportados correctamente: " << queryFile << ", " << nodesGeohashFile << endl;
 }
 
+void query(double lat, double lon, const string& queryFile, const string& nodesGeohashFile) {
+    try {
+        Edge closest_edge = findClosestEdge(lat, lon);
+        cout << "La arista mas cercana al punto (" << lat << ", " << lon << ") es: " << closest_edge.u << " -> " << closest_edge.v << endl << " . Nombre: " << closest_edge.names[0] << endl;
+
+        Node node_u = node_map.at(closest_edge.u);
+        Node node_v = node_map.at(closest_edge.v);
+
+        cout << "Coordenadas de los nodos:" << endl;
+        cout << "  Nodo u (" << closest_edge.u << "): " << node_u.lat << ", " << node_u.lon << endl;
+        cout << "  Nodo v (" << closest_edge.v << "): " << node_v.lat << ", " << node_v.lon << endl;
+
+        exportCSV(queryFile, nodesGeohashFile, lat, lon, closest_edge);
+
+    } catch (const exception &e) {
+        cerr << "[ERROR] -> " << e.what() << endl;
+    }
+}
 
 int main(){
     string nodesFile = "nodes.csv";
@@ -191,9 +246,13 @@ int main(){
 
     readDataset(nodesFile, edgesFile);
 
-    double lat = -12.046374;
-    double lon = -77.042793;
-    query(lat, lon);
+    //caso de prueba Plaza de armas de Arequipa: -16.39883, -71.53697
+    double lat = -16.39883;
+    double lon = -71.53697;
+
+    string queryFile = "query_exported.csv";
+    string nodesGeohashFile = "nodes_geohashed.csv";
+    query(lat, lon, queryFile, nodesGeohashFile);
 
     return 0;
 }
